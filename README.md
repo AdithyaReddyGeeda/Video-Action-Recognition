@@ -17,6 +17,45 @@ A deep learning project for video action recognition using PyTorch. This project
 - Python 3.8+
 - CUDA-capable GPU (recommended)
 - 8GB+ RAM
+- FFmpeg (for video processing and validation)
+
+### Run the web app
+
+```bash
+pip install -r requirements.txt
+python app.py
+```
+
+Open http://localhost:5001. For **development** (debug mode, auto-reload):
+
+```bash
+FLASK_DEBUG=1 python app.py
+```
+
+### Production deployment
+
+The app is production-ready with config from environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLASK_DEBUG` | `0` | Set to `1` for debug mode (do not use in production). |
+| `FLASK_HOST` | `0.0.0.0` | Bind address. |
+| `FLASK_PORT` | `5001` | Server port. |
+| `MAX_UPLOAD_MB` | `100` | Max upload size in MB. |
+| `RATE_LIMIT_UPLOAD` | `10 per minute` | Rate limit for uploads (per client). |
+| `RATE_LIMIT_PREDICT` | `20 per minute` | Rate limit for predictions. |
+| `UPLOAD_FOLDER` | system temp dir | Directory for temporary uploads. |
+| `RATELIMIT_STORAGE_URI` | `memory://` | Rate limit storage. Use `redis://localhost:6379` (or your Redis URL) for production with multiple workers. |
+
+- **Security**: Uploads are validated with ffprobe; filenames are uniqued to avoid overwrites; path traversal is blocked on `/predict`.
+- **Rate limiting**: Uses in-memory storage by default (fine for single process). For production with multiple workers, set `RATELIMIT_STORAGE_URI=redis://...`.
+- **Health check**: `GET /health` returns `{"status": "ok"}` for load balancers.
+
+Example:
+
+```bash
+FLASK_DEBUG=0 FLASK_PORT=8080 RATE_LIMIT_UPLOAD="5 per minute" python app.py
+```
 
 ## Project Structure
 
