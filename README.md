@@ -14,7 +14,7 @@ A deep learning project for video action recognition using PyTorch. This project
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.8
 - CUDA-capable GPU (recommended)
 - 8GB+ RAM
 - FFmpeg (for video processing and validation)
@@ -107,7 +107,7 @@ python train.py \
     --batch_size 16 \
     --lr 0.001 \
     --num_frames 32 \
-    --frame_size 224 224 \
+    --frame_size 224 224 
     --experiment_name my_experiment
 ```
 
@@ -198,7 +198,7 @@ python train.py \
 ## Requirements
 
 ### Software
-- Python 3.8+
+- Python 3.8
 - CUDA 11.0+ (for GPU training)
 - FFmpeg (for video processing)
 
