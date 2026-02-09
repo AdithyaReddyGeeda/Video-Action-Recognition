@@ -22,6 +22,13 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_MODEL_PATH = os.path.join(SCRIPT_DIR, "best_model.pth")
 DEFAULT_LABEL_ENCODER_PATH = os.path.join(SCRIPT_DIR, "label_encoder.pkl")
 
+# Git LFS pointer files are small (< 500 bytes); real PyTorch checkpoints are much larger
+def _is_likely_lfs_pointer(path):
+    try:
+        return os.path.isfile(path) and os.path.getsize(path) < 500
+    except OSError:
+        return False
+
 
 @st.cache_resource
 def get_model_and_encoder(model_path, label_encoder_path):
@@ -55,6 +62,11 @@ with st.sidebar:
     label_encoder_path = st.text_input("Label encoder path", value=DEFAULT_LABEL_ENCODER_PATH)
     if not os.path.isfile(model_path):
         st.error(f"Model file not found: {model_path}")
+    elif _is_likely_lfs_pointer(model_path):
+        st.warning(
+            "Model file looks like a Git LFS pointer (not the real file). "
+            "On Streamlit Cloud, pull LFS first or commit the real model. See README."
+        )
     if not os.path.isfile(label_encoder_path):
         st.error(f"Label encoder not found: {label_encoder_path}")
 

@@ -1,0 +1,11 @@
+# Streamlit config for local run and Community Cloud.
+# See: https://docs.streamlit.io/deploy/streamlit-community-cloud
+
+[server]
+# Max size (MB) for uploaded videos. Community Cloud default is 200.
+maxUploadSize = 200
+# Allow running from repo root (Streamlit Cloud)
+enableCORS = false
+
+[browser]
+gatherUsageStats = false

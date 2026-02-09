@@ -41,9 +41,44 @@ pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
 
-Open the URL shown in the terminal (default http://localhost:8501). Model and label encoder paths can be changed in the sidebar. To **deploy on [Streamlit Community Cloud](https://share.streamlit.io)**, connect your GitHub repo and set the main file to `streamlit_app.py`.
+Open the URL shown in the terminal (default http://localhost:8501). Model and label encoder paths can be changed in the sidebar.
 
-### Production deployment
+### Deploying on Streamlit Community Cloud (shareable link)
+
+Yes — you can deploy this app on [Streamlit Community Cloud](https://share.streamlit.io) so anyone can run it via a link (e.g. `https://yourapp.streamlit.app`).
+
+**Checklist**
+
+| Requirement | Status |
+|-------------|--------|
+| Entrypoint | Use **Main file path**: `streamlit_app.py` |
+| Dependencies | `requirements.txt` in repo root ✓ |
+| Paths | App uses paths relative to repo root ✓ |
+| Python | 3.8–3.12 (Community Cloud supported) ✓ |
+
+**Important: model file and Git LFS**
+
+- `best_model.pth` is tracked with **Git LFS** (~13 MB). Streamlit Cloud does not always pull LFS files; if the app fails to load the model, you may see an error about "file signature" or invalid checkpoint.
+- **Options:**
+  1. **Remove LFS for the model** (so the real file is in the repo):  
+     `git lfs untrack "*.pth"`, then add and commit the real `best_model.pth` (must be under 100 MB). Push to GitHub and redeploy.
+  2. **Keep LFS** and hope the deploy environment pulls LFS (try deploy first; if it fails, use option 1).
+  3. **Host the model elsewhere** (e.g. Hugging Face, Drive) and add a one-time download in the app when the file is missing.
+
+**Resource limits (free tier)**
+
+- **Memory**: PyTorch + model need ~1–2 GB. If the app crashes on first load, try a lighter `requirements.txt` (e.g. CPU-only PyTorch) or upgrade plan.
+- **Cold start**: First run can take 2–5 minutes (install + model load). Later runs are faster (cached).
+- **No GPU** on Community Cloud — inference runs on CPU (slower but works).
+
+**Steps to deploy**
+
+1. Push this repo to GitHub (public or private; private needs Streamlit’s GitHub access).
+2. Go to [share.streamlit.io](https://share.streamlit.io), sign in with GitHub.
+3. Click **New app**, choose this repo, branch `main`, **Main file path** `streamlit_app.py`.
+4. Click **Deploy**. After the build, your app will have a shareable link; anyone can open it and run predictions in their browser.
+
+### Production deployment (Flask)
 
 The app is production-ready with config from environment variables:
 
