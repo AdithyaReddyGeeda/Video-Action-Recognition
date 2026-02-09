@@ -19,7 +19,7 @@ A deep learning project for video action recognition using PyTorch. This project
 - 8GB+ RAM
 - FFmpeg (for video processing and validation)
 
-### Run the web app
+### Run the web app (Flask)
 
 ```bash
 pip install -r requirements.txt
@@ -31,6 +31,17 @@ Open http://localhost:5001. For **development** (debug mode, auto-reload):
 ```bash
 FLASK_DEBUG=1 python app.py
 ```
+
+### Run with Streamlit
+
+You can also run the app with Streamlit (e.g. for [Streamlit Community Cloud](https://share.streamlit.io) or local use):
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+Open the URL shown in the terminal (default http://localhost:8501). Model and label encoder paths can be changed in the sidebar. To **deploy on [Streamlit Community Cloud](https://share.streamlit.io)**, connect your GitHub repo and set the main file to `streamlit_app.py`.
 
 ### Production deployment
 
@@ -62,7 +73,8 @@ FLASK_DEBUG=0 FLASK_PORT=8080 RATE_LIMIT_UPLOAD="5 per minute" python app.py
 ```
 video-action-recognition/
 ├── app.py                      # Flask web server
-├── video_predictor.html        # Web interface
+├── streamlit_app.py            # Streamlit UI (run: streamlit run streamlit_app.py)
+├── video_predictor.html        # Flask web interface
 ├── model.py                    # Model architectures
 ├── predict_single_video.py     # Single video prediction
 ├── train.py                    # Training script
