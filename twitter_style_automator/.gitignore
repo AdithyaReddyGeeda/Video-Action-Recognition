@@ -1,0 +1,10 @@
+.env
+venv/
+__pycache__/
+*.pyc
+*.db
+style_profile.json
+*.log
+post_count_date.txt
+posted_tweets.log
+.DS_Store

@@ -1,0 +1,15 @@
+# Twitter (X) API v2
+tweepy>=4.14.0
+
+# AI: OpenAI and/or Anthropic (Claude) for style analysis and tweet generation
+openai>=1.12.0
+anthropic>=0.39.0
+
+# Scheduling
+apscheduler>=3.10.4
+
+# Environment and config
+python-dotenv>=1.0.0
+
+# HTTP and utilities (tweepy/requests)
+requests>=2.31.0
