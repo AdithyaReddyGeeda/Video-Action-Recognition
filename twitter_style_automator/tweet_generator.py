@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ai_client import chat
-from style_analyzer import load_style_profile
+from style_analyzer import get_default_style_profile, load_style_profile
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +56,14 @@ def generate_tweet(
 ) -> str:
     """
     Generate one tweet matching the style profile. Returns the tweet text only.
-    Uses OpenAI or Claude depending on AI_PROVIDER in .env.
+    Uses OpenAI, Claude, or Ollama depending on AI_PROVIDER in .env.
+    If no style profile exists (e.g. before fetch/analyze), uses a minimal default so you can test.
     """
-    profile = load_style_profile(profile_path)
+    try:
+        profile = load_style_profile(profile_path)
+    except FileNotFoundError:
+        logger.warning("No style profile found; using default (run fetch-tweets and analyze-style for your real style).")
+        profile = get_default_style_profile()
     prompt = build_generation_prompt(profile, topic=topic, extra_instructions=extra_instructions)
 
     text = chat(

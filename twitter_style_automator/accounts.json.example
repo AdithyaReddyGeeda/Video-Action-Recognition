@@ -1,0 +1,10 @@
+{
+  "handle1": {
+    "access_token": "your_access_token_for_handle1",
+    "access_token_secret": "your_access_token_secret_for_handle1"
+  },
+  "handle2": {
+    "access_token": "your_access_token_for_handle2",
+    "access_token_secret": "your_access_token_secret_for_handle2"
+  }
+}

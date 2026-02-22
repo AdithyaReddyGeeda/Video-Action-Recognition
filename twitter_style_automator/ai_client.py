@@ -1,12 +1,19 @@
 """
-Unified AI client: OpenAI or Anthropic (Claude).
-Uses AI_PROVIDER and the corresponding API key from config.
+Unified AI client: OpenAI, Anthropic (Claude), or Ollama (local).
+Uses AI_PROVIDER and the corresponding config from .env.
 """
 
 import logging
 from typing import Optional
 
-from config import AI_PROVIDER, ANTHROPIC_API_KEY, ANTHROPIC_MODEL, OPENAI_API_KEY
+from config import (
+    AI_PROVIDER,
+    ANTHROPIC_API_KEY,
+    ANTHROPIC_MODEL,
+    OLLAMA_BASE_URL,
+    OLLAMA_MODEL,
+    OPENAI_API_KEY,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,24 +26,42 @@ def chat(
     api_key_override: Optional[str] = None,
 ) -> str:
     """
-    Send a chat completion request to the configured provider (OpenAI or Anthropic).
+    Send a chat completion request to the configured provider.
     Returns the assistant's reply text.
     """
+    if AI_PROVIDER == "ollama":
+        return _ollama_chat(
+            system=system,
+            user_content=user_content,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
     if AI_PROVIDER == "anthropic":
         key = api_key_override or ANTHROPIC_API_KEY
         if not key:
             raise ValueError(
-                "ANTHROPIC_API_KEY is required. Set it in .env or get a key at "
-                "https://console.anthropic.com/"
+                "ANTHROPIC_API_KEY is required. Set it in .env or use AI_PROVIDER=ollama for local."
             )
-        return _anthropic_chat(system=system, user_content=user_content, max_tokens=max_tokens, temperature=temperature, api_key=key, model=ANTHROPIC_MODEL)
-    else:
-        key = api_key_override or OPENAI_API_KEY
-        if not key:
-            raise ValueError(
-                "OPENAI_API_KEY is required. Set it in .env or use AI_PROVIDER=anthropic with ANTHROPIC_API_KEY."
-            )
-        return _openai_chat(system=system, user_content=user_content, max_tokens=max_tokens, temperature=temperature, api_key=key)
+        return _anthropic_chat(
+            system=system,
+            user_content=user_content,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            api_key=key,
+            model=ANTHROPIC_MODEL,
+        )
+    key = api_key_override or OPENAI_API_KEY
+    if not key:
+        raise ValueError(
+            "OPENAI_API_KEY is required. Set it in .env or use AI_PROVIDER=anthropic or AI_PROVIDER=ollama."
+        )
+    return _openai_chat(
+        system=system,
+        user_content=user_content,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        api_key=key,
+    )
 
 
 def _openai_chat(
@@ -82,3 +107,35 @@ def _anthropic_chat(
         if hasattr(block, "text"):
             return block.text.strip()
     return ""
+
+
+def _ollama_chat(
+    system: str,
+    user_content: str,
+    max_tokens: int,
+    temperature: float,
+) -> str:
+    """Call local Ollama API. No API key required; ensure Ollama is running and model is pulled."""
+    import requests
+    base = OLLAMA_BASE_URL.rstrip("/")
+    url = f"{base}/api/chat"
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user_content}]
+    payload = {
+        "model": OLLAMA_MODEL,
+        "messages": messages,
+        "stream": False,
+        "options": {"temperature": temperature, "num_predict": max_tokens},
+    }
+    try:
+        r = requests.post(url, json=payload, timeout=120)
+        r.raise_for_status()
+        data = r.json()
+        msg = data.get("message") or {}
+        text = (msg.get("content") or "").strip()
+        return text
+    except requests.exceptions.ConnectionError:
+        raise ValueError(
+            f"Could not reach Ollama at {base}. Is Ollama running? Start it with: ollama serve"
+        )
+    except requests.exceptions.RequestException as e:
+        raise ValueError(f"Ollama request failed: {e}")

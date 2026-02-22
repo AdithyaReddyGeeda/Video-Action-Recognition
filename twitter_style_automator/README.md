@@ -1,32 +1,41 @@
 # Twitter Style Automator
 
-A Python project that automates a Twitter (X) account by **analyzing your existing tweets** and **generating and posting new ones** in a similar style. Target handle: **@mcisaul_** (configurable).
+A Python project that automates one or more Twitter (X) accounts by **analyzing your existing tweets** and **generating and posting new ones** in a similar style. You can train and run the automator for **multiple accounts** by using `--handle` and an optional **accounts file** for per-account credentials.
 
 ## Features
 
 - **Tweet fetching**: X API v2 (Tweepy) to fetch up to ~3200 timeline tweets with pagination and rate-limit handling
 - **Storage**: SQLite database (or path of your choice) for fetched tweets
-- **Style analysis**: OpenAI GPT analyzes tweets and produces a reusable "style profile" (topics, tone, length, emojis, hashtags, language)
-- **Tweet generation**: New tweets from the style profile on a given topic or auto-suggested
-- **Posting**: Post generated tweets; optional scheduling with APScheduler
+- **Style analysis**: AI (OpenAI, Claude, or Ollama) analyzes tweets and produces a reusable "style profile" (topics, tone, length, emojis, hashtags, language)
+- **Tweet generation**: New tweets from the style profile (OpenAI, Claude, or local Ollama)
+- **Posting**: Post generated tweets with optional **images and videos**; optional scheduling with APScheduler
+- **Media**: Attach **relevant** image (AI-generated with DALL·E or picked from your folder) and/or video (picked from folder); AI picks the best match for each tweet
 - **Engagement**: Reply to mentions (placeholder), like/retweet by keywords
 - **Safety**: Random delays, rate-limit handling, dry-run mode; API keys via `.env`
 
 ## Project structure
 
+When you clone this repo, files are at the **repo root** (e.g. `Twitter-automation/`):
+
 ```
-twitter_style_automator/
 ├── twitter_style_automator.py   # Main CLI entry point
 ├── tweet_fetcher.py             # X API v2 fetch + SQLite
-├── style_analyzer.py            # OpenAI style analysis → profile
-├── tweet_generator.py           # OpenAI tweet generation from profile
+├── style_analyzer.py            # AI style analysis → profile
+├── tweet_generator.py           # AI tweet generation from profile
 ├── poster.py                    # Posting, scheduling, like/retweet
+├── media_helper.py              # Relevant image/video (AI, folder, or Twitter) + upload
+├── twitter_media_search.py      # Search X for media, download, pick with AI
+├── content_guard.py             # Safety check + blocklist before posting
+├── ai_client.py                 # Unified OpenAI / Claude client
 ├── config.py                    # Loads .env and paths
+├── accounts.py                  # Multi-account credentials (accounts.json)
 ├── requirements.txt
 ├── .env.example
+├── accounts.json.example        # Template for multiple accounts (copy to accounts.json)
 ├── README.md
 ├── tweets.db                    # Created after fetch (SQLite)
-└── style_profile.json           # Created after analyze-style
+├── style_profile.json           # Single-account profile (legacy)
+└── style_profiles/              # Per-handle profiles when using --handle (e.g. handle1.json)
 ```
 
 ## Setup
@@ -34,7 +43,7 @@ twitter_style_automator/
 ### 1. Python environment
 
 ```bash
-cd twitter_style_automator
+# Clone the repo, then from the repo root (e.g. Twitter-automation):
 python3 -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
@@ -52,20 +61,23 @@ You need **Elevated** access to read user timelines (including your own).
    - **Bearer Token** (for timeline reads with v2)
 4. Ensure your app has **Read and Write** permissions.
 
-### 3. AI API key (OpenAI or Claude)
+### 3. AI: OpenAI, Claude, or Ollama (local)
 
-You can use **Claude** (Anthropic) or **OpenAI** for style analysis, tweet generation, and safety checks.
+You can use **Ollama** (local, no API key), **Claude**, or **OpenAI** for style analysis, tweet generation, and safety checks.
 
-**Option A – Claude (no OpenAI key needed)**  
+**Option A – Ollama (local, free, no key)**  
+1. Install [Ollama](https://ollama.com) and start it: `ollama serve`.  
+2. Pull a model: `ollama pull llama3.2` (or `mistral`, `llama3.1`, etc.).  
+3. In `.env` set: `AI_PROVIDER=ollama`, and optionally `OLLAMA_MODEL=llama3.2`, `OLLAMA_BASE_URL=http://localhost:11434`.  
+No API key needed; everything runs on your machine.
+
+**Option B – Claude**  
 1. Go to [Anthropic Console](https://console.anthropic.com/) and create an API key.  
-2. In `.env` set: `AI_PROVIDER=anthropic` and `ANTHROPIC_API_KEY=your_key`.  
-3. Leave `OPENAI_API_KEY` empty if you’re not using OpenAI.
+2. In `.env` set: `AI_PROVIDER=anthropic` and `ANTHROPIC_API_KEY=your_key`.
 
-**Option B – OpenAI**  
+**Option C – OpenAI**  
 1. Go to [OpenAI API Keys](https://platform.openai.com/api-keys) and create a key.  
 2. In `.env` set: `AI_PROVIDER=openai` and `OPENAI_API_KEY=your_key`.
-
-Default is `AI_PROVIDER=anthropic` if you don’t set it.
 
 ### 4. Environment variables
 
@@ -78,19 +90,38 @@ cp .env.example .env
 Edit `.env`:
 
 - `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`, `X_BEARER_TOKEN`
-- `AI_PROVIDER=anthropic` or `openai`; then the matching key: `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
-- `X_HANDLE=mcisaul_` (no `@`)
-- Optional: `MIN_DELAY_SEC`, `MAX_DELAY_SEC` for random delays (defaults 30–120 s)
+- `AI_PROVIDER=ollama` (local), `anthropic`, or `openai`; for non-Ollama set the matching key: `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. For Ollama: `OLLAMA_MODEL=llama3.2`, `OLLAMA_BASE_URL=http://localhost:11434`
+- `X_HANDLE=mcisaul_` (no `@`) – default account when `--handle` is not used
+- Optional: `MIN_DELAY_SEC`, `MAX_DELAY_SEC` (defaults 30–120 s); `MAX_POSTS_PER_DAY` (default 5); `ENABLE_SAFETY_CHECK=true`; `BLOCKLIST=word1,word2`
+- **Media**: `ENABLE_IMAGE=true`, `IMAGE_SOURCE=ai` or `folder`, `IMAGE_FOLDER_PATH=/path`; `ENABLE_VIDEO=true`, `VIDEO_FOLDER_PATH=/path`. For AI images (DALL·E) you need `OPENAI_API_KEY`.
+- **Multiple accounts**: Copy `accounts.json.example` to `accounts.json` and add each handle with its `access_token` and `access_token_secret`. Use the same app (same `X_API_KEY`/`X_API_SECRET`); each account needs its own OAuth access token. If a handle is not in `accounts.json`, the bot uses `X_ACCESS_TOKEN` and `X_ACCESS_TOKEN_SECRET` from `.env`.
+- **Learn from many, post as one**: Set `SOURCE_HANDLES=user1,user2,user3,...,user10` (comma-separated, no `@`). The bot will fetch and analyze those accounts’ tweets with **only your Bearer token** (no keys for those accounts). It builds one blended style profile and posts **only** from `X_HANDLE` (the one account you have access tokens for). See “Learn from 10, post as one” below.
 
-Never commit `.env` or share these keys.
+Never commit `.env`, `accounts.json`, or share these keys.
+
+### 5. Media (optional): images and videos
+
+To attach **relevant** image and/or video to each tweet:
+
+- **Images** (`ENABLE_IMAGE=true`)
+  - **`IMAGE_SOURCE=twitter`** (recommended): Search X for recent public tweets with images matching your tweet/topic, pick the most relevant with AI, download and attach. Uses `X_BEARER_TOKEN`. No DALL·E or folder needed.
+  - **`IMAGE_SOURCE=ai`**: Generate with OpenAI DALL·E. Requires `OPENAI_API_KEY`.
+  - **`IMAGE_SOURCE=folder`**: Pick from `IMAGE_FOLDER_PATH` using AI.
+- **Videos** (`ENABLE_VIDEO=true`)
+  - **`VIDEO_SOURCE=twitter`**: Search X for recent public tweets with video matching your tweet/topic, pick the most relevant with AI, download and attach. Uses `X_BEARER_TOKEN`.
+  - **`VIDEO_SOURCE=folder`**: Pick from `VIDEO_FOLDER_PATH` using AI. Supported: `.mp4`, `.mov`, `.m4v`, `.webm`.
+
+Twitter allows **one video OR up to 4 images** per tweet. The bot attaches at most one video or one image per tweet. Media is uploaded via X API v1.1 and attached to the v2 tweet.
+
+**Reusing media from X:** When using `IMAGE_SOURCE=twitter` or `VIDEO_SOURCE=twitter`, the bot finds public media via the X API and reuses it. You are responsible for respecting copyright and X’s Terms of Service; consider using only when you have rights or the content is clearly licensed for reuse.
 
 ## Testing (dry-run, no real posts)
 
 Test the full flow **without posting** anything to X. Use `--dry-run` wherever posting is involved.
 
-**1. Activate venv and go to project folder**
+**1. Activate venv and go to project folder (repo root)**
 ```bash
-cd twitter_style_automator
+cd Twitter-automation   # or your clone path
 source venv/bin/activate   # Windows: venv\Scripts\activate
 ```
 
@@ -100,7 +131,7 @@ python twitter_style_automator.py fetch-tweets --max-tweets 100
 ```
 If you hit rate limits, wait and retry or use a smaller `--max-tweets`.
 
-**3. Build the style profile** (needs `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in `.env`, and `AI_PROVIDER=anthropic` or `openai`).
+**3. Build the style profile** (needs `AI_PROVIDER` set and, if not using Ollama, the matching API key).
 ```bash
 python twitter_style_automator.py analyze-style --max-tweets 100
 ```
@@ -148,22 +179,48 @@ python twitter_style_automator.py run --interval-hours 12 --topic "tech"
 
 Options: `--no-fetch` / `--no-analyze` to skip those steps; `--refresh-days 7` to re-fetch tweets only if the DB is older than 7 days (default).
 
+### Learn from 10 accounts, post as one
+
+You only need **one Bearer token** to fetch public tweets from many accounts. Set in `.env`:
+
+```bash
+SOURCE_HANDLES=user1,user2,user3,user4,user5,user6,user7,user8,user9,user10
+X_HANDLE=your_posting_account   # the one account you have access token for
+```
+
+Then run:
+
+```bash
+# Fetch all 10 source accounts (Bearer token only; no keys for them)
+python twitter_style_automator.py fetch-tweets --all-sources --max-tweets 500
+
+# Build one blended style profile from all 10
+python twitter_style_automator.py analyze-style --combined
+
+# Post from your single account using that blended style
+python twitter_style_automator.py post-tweet
+```
+
+Or one command: `python twitter_style_automator.py run` (fetches all sources, builds combined profile, then runs the scheduler posting as `X_HANDLE`).
+
 ### Fetch tweets
 
-Stores your timeline in SQLite (up to ~3200 tweets; API limit without archive):
+Stores timeline(s) in SQLite. Use `--handle` for one account, or `--all-sources` to fetch every account in `SOURCE_HANDLES` (Bearer token only).
 
 ```bash
 python twitter_style_automator.py fetch-tweets
 python twitter_style_automator.py fetch-tweets --handle mcisaul_ --max-tweets 500
+python twitter_style_automator.py fetch-tweets --all-sources --max-tweets 500
 ```
 
 ### Analyze style
 
-Builds a style profile from stored tweets (saved to `style_profile.json`):
+Builds a style profile from stored tweets. Use `--handle` for one account, or `--combined` to build one blended profile from all `SOURCE_HANDLES`.
 
 ```bash
 python twitter_style_automator.py analyze-style
-python twitter_style_automator.py analyze-style --max-tweets 200
+python twitter_style_automator.py analyze-style --handle other_account --max-tweets 200
+python twitter_style_automator.py analyze-style --combined
 ```
 
 ### Generate a tweet (no post)
@@ -178,14 +235,15 @@ python twitter_style_automator.py generate-tweet --suggest
 
 ### Post one tweet (fully automatic, with safeguards)
 
-Generates a tweet, runs **safety checks**, then posts—**no input from you**:
+Generates a tweet, runs **safety checks**, then posts—**no input from you**. Use `--handle` to post as a specific account (credentials from `accounts.json` or `.env`).
 
 ```bash
 python twitter_style_automator.py post-tweet
 python twitter_style_automator.py post-tweet --topic "tech"
+python twitter_style_automator.py post-tweet --handle other_account
 ```
 
-Safeguards: daily post limit, AI content check (on-brand, no hate/misinformation), blocklist, and similarity check so it doesn’t repeat recent tweets. All posts are logged to `posted_tweets.log` for review.
+Safeguards: daily post limit (per handle), AI content check (on-brand, no hate/misinformation), blocklist, and similarity check so it doesn’t repeat recent tweets. All posts are logged (per-handle log when using `--handle`, else `posted_tweets.log`).
 
 Use `--dry-run` to generate and log only, no real post:
 
@@ -298,19 +356,19 @@ To have the **scheduler** run continuously (posting every N hours without relyin
 ## Options (global)
 
 - `--db PATH` – SQLite DB path (default: `tweets.db` in project dir)
-- `--profile PATH` – Style profile JSON path (default: `style_profile.json`)
-- `--handle HANDLE` – X handle without `@` (default: from `X_HANDLE`)
+- `--profile PATH` – Style profile JSON path (default: `style_profile.json` or `style_profiles/<handle>.json` when `--handle` is set)
+- `--handle HANDLE` – X handle without `@` for fetch/analyze/post (default: from `X_HANDLE`). Use for **multi-account**: each handle gets its own style profile, post count, and log; credentials from `accounts.json` or `.env`
 - `--dry-run` – Do not post, like, or retweet; only log
 
 ## Autonomous mode and safeguards
 
 The automator is designed to run **without any input from you**. To keep posting careful and on-brand, it uses:
 
-1. **Daily cap** – `MAX_POSTS_PER_DAY` (default 5). No more than that many posts per calendar day.
-2. **AI safety check** – Before each post, an OpenAI call scores the tweet (1–5) for: on-brand, appropriate, no hate/misinformation. Only tweets that pass (score ≥ 4) are posted. Set `ENABLE_SAFETY_CHECK=false` in `.env` to disable.
+1. **Daily cap** – `MAX_POSTS_PER_DAY` (default 5) per handle. No more than that many posts per calendar day per account.
+2. **AI safety check** – Before each post, an AI call (OpenAI, Claude, or Ollama) scores the tweet (1–5) for: on-brand, appropriate, no hate/misinformation. Only tweets that pass (score ≥ 4) are posted. Set `ENABLE_SAFETY_CHECK=false` in `.env` to disable.
 3. **Blocklist** – In `.env`, set `BLOCKLIST=word1,word2,phrase` (comma-separated). Any tweet containing one of these (case-insensitive) is rejected.
 4. **Similarity check** – If a generated tweet is too similar to one of your recent timeline tweets (from the DB), it is skipped to avoid repetition.
-5. **Post log** – Every post (and dry-run) is appended to `posted_tweets.log` (timestamp, tweet id, text) so you can review what was posted.
+5. **Post log** – Every post (and dry-run) is appended to a log file: `posted_tweets.log` (single account) or `post_log_<handle>.txt` when using `--handle`, so you can review what was posted.
 
 You can run `post-tweet` or `schedule-posts` and walk away; the bot will only post when these checks pass.
 
@@ -324,7 +382,9 @@ You can run `post-tweet` or `schedule-posts` and walk away; the bot will only po
 ## Dependencies
 
 - **tweepy** – X API v2 (and v1.1 where used)
-- **openai** – Style analysis and tweet generation
+- **openai** – When `AI_PROVIDER=openai`
+- **anthropic** – When `AI_PROVIDER=anthropic`
+- **requests** – Used for Ollama HTTP calls (when `AI_PROVIDER=ollama`); no extra key needed
 - **apscheduler** – Scheduled posting
 - **python-dotenv** – Load `.env`
 
@@ -332,4 +392,4 @@ SQLite is in the standard library.
 
 ## License
 
-Use and modify as you like; ensure compliance with X’s and OpenAI’s terms of use.
+Use and modify as you like; ensure compliance with X’s, OpenAI’s, and Anthropic’s terms of use.

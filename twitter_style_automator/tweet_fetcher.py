@@ -31,7 +31,7 @@ def get_db_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
 
 
 def init_db(db_path: Optional[Path] = None) -> None:
-    """Create tweets table if it does not exist."""
+    """Create tweets table if it does not exist. Add handle column for multi-account."""
     conn = get_db_connection(db_path)
     try:
         conn.execute(
@@ -53,7 +53,17 @@ def init_db(db_path: Optional[Path] = None) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_tweets_created_at ON tweets(created_at)"
         )
+        try:
+            conn.execute("ALTER TABLE tweets ADD COLUMN handle TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tweets_handle ON tweets(handle)"
+        )
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -96,19 +106,20 @@ def _public_metrics_to_ints(metrics: dict) -> tuple:
     )
 
 
-def insert_tweet(conn: sqlite3.Connection, tweet: Any) -> None:
-    """Insert or replace a single tweet row."""
+def insert_tweet(conn: sqlite3.Connection, tweet: Any, handle: str = "") -> None:
+    """Insert or replace a single tweet row. handle = account username for multi-account."""
     row = tweet_to_row(tweet)
     rt, like, reply, quote = _public_metrics_to_ints(row[3])
     conn.execute(
         """
         INSERT OR REPLACE INTO tweets (
-            id, text, created_at, retweet_count, like_count,
+            id, handle, text, created_at, retweet_count, like_count,
             reply_count, quote_count, hashtags, mentions, raw_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             row[0],
+            (handle or "").strip().lstrip("@"),
             row[1],
             row[2],
             rt,
@@ -127,6 +138,7 @@ def fetch_user_tweets(
     username: str,
     max_tweets: Optional[int] = 3200,
     db_path: Optional[Path] = None,
+    store_handle: Optional[str] = None,
 ) -> int:
     """
     Fetch timeline for the given username using API v2 and store in SQLite.
@@ -176,10 +188,11 @@ def fetch_user_tweets(
         if not response.data:
             break
 
+        handle_to_store = (store_handle or username or "").strip().lstrip("@")
         conn = get_db_connection(db_path)
         try:
             for tweet in response.data:
-                insert_tweet(conn, tweet)
+                insert_tweet(conn, tweet, handle=handle_to_store)
                 count += 1
                 if max_tweets and count >= max_tweets:
                     break
@@ -205,14 +218,21 @@ def fetch_user_tweets(
 def get_all_tweets_from_db(
     db_path: Optional[Path] = None,
     limit: Optional[int] = None,
+    handle: Optional[str] = None,
 ) -> List[dict]:
-    """Read stored tweets from SQLite as list of dicts for analysis."""
+    """Read stored tweets from SQLite as list of dicts for analysis. Filter by handle when set."""
     conn = get_db_connection(db_path)
     try:
-        sql = "SELECT id, text, created_at, hashtags, mentions FROM tweets ORDER BY created_at DESC"
+        sql = "SELECT id, text, created_at, hashtags, mentions FROM tweets"
+        params = []
+        if handle:
+            handle_clean = handle.strip().lstrip("@")
+            sql += " WHERE handle = ?"
+            params.append(handle_clean)
+        sql += " ORDER BY created_at DESC"
         if limit:
             sql += f" LIMIT {int(limit)}"
-        rows = conn.execute(sql).fetchall()
+        rows = conn.execute(sql, params).fetchall()
         return [
             {
                 "id": r["id"],

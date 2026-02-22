@@ -1,10 +1,14 @@
 .env
+accounts.json
 venv/
 __pycache__/
 *.pyc
 *.db
 style_profile.json
+style_profiles/
 *.log
 post_count_date.txt
+post_count_*.txt
 posted_tweets.log
+post_log_*.txt
 .DS_Store
